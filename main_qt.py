@@ -2,8 +2,9 @@ import sys
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout,
     QPushButton, QFileDialog, QTextEdit, QLabel,
-    QComboBox, QTabWidget, QTableWidget, QTableWidgetItem,
-    QHBoxLayout, QLineEdit, QMenuBar
+    QComboBox, QTableWidget, QTableWidgetItem,
+    QHBoxLayout, QLineEdit, QMenuBar, QSizePolicy,
+    QGroupBox, QMessageBox
 )
 from PySide6.QtGui import QAction
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
@@ -53,13 +54,25 @@ class MainWindow(QMainWindow):
         self.btn_graficar = QPushButton("Mostrar gráficas")
         self.btn_graficar.clicked.connect(self.mostrar_graficas)
 
-        opciones_layout.addWidget(QLabel("Opciones"))
+        self.btn_limpiar = QPushButton("Limpiar")
+        self.btn_limpiar.setStyleSheet("background-color: #ff6b6b; color: white;")
+        self.btn_limpiar.clicked.connect(self.limpiar_datos)
+
         opciones_layout.addWidget(self.combo_metodo)
         opciones_layout.addWidget(self.input_gl)
         opciones_layout.addWidget(self.btn_ejecutar)
         opciones_layout.addWidget(self.btn_graficar)
+        opciones_layout.addWidget(self.btn_limpiar)
 
-        left_panel.addLayout(opciones_layout, 1)
+        self.options_group = QGroupBox("Opciones de prueba")
+        self.options_group.setLayout(opciones_layout)
+
+        size_policy = QSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
+        self.options_group.setSizePolicy(size_policy)
+        self.options_group.setFixedHeight(230)
+        self.options_group.setVisible(False)
+
+        left_panel.addWidget(self.options_group)
 
         # ---------------- PANEL CENTRAL (GRÁFICAS) ----------------
         self.graph_container = QWidget()
@@ -72,17 +85,32 @@ class MainWindow(QMainWindow):
         graph_layout.addWidget(self.disp_canvas)
         self.graph_container.setLayout(graph_layout)
 
-        # ---------------- PANEL INFERIOR (TAB RESULTS + TABLA) ----------------
-        self.tabs = QTabWidget()
+        # ---------------- PANEL INFERIOR (RESULTADOS + TABLA) ----------------
         self.tab_resultados = QTextEdit()
+        self.tab_resultados.setReadOnly(True)
+        self.tab_resultados.setFontFamily("Courier New")
+        self.tab_resultados.setStyleSheet("background-color: #f4f4f4; color: #1f1f1f; font-size: 11pt;")
+
         self.tab_tabla = QTableWidget()
 
-        self.tabs.addTab(self.tab_resultados, "Resultados")
-        self.tabs.addTab(self.tab_tabla, "Tabla")
+        bottom_panel = QHBoxLayout()
+        
+        # Panel izquierdo del inferior (Resultados)
+        resultados_container = QVBoxLayout()
+        resultados_container.addWidget(QLabel("Resultados"))
+        resultados_container.addWidget(self.tab_resultados)
+        
+        # Panel derecho del inferior (Tabla)
+        tabla_container = QVBoxLayout()
+        tabla_container.addWidget(QLabel("Tabla de categorías"))
+        tabla_container.addWidget(self.tab_tabla)
+        
+        bottom_panel.addLayout(resultados_container)
+        bottom_panel.addLayout(tabla_container)
 
         right_panel = QVBoxLayout()
         right_panel.addWidget(self.graph_container, 2)
-        right_panel.addWidget(self.tabs, 1)
+        right_panel.addLayout(bottom_panel, 1)
 
         main_layout.addLayout(left_panel, 1)
         main_layout.addLayout(right_panel, 3)
@@ -123,6 +151,7 @@ class MainWindow(QMainWindow):
 
         self.mostrar_datos_tabla()
         self.actualizar_graficas()
+        self.options_group.setVisible(True)
 
     def mostrar_datos_tabla(self):
         self.tab_datos.setRowCount(len(self.numeros))
@@ -139,6 +168,7 @@ class MainWindow(QMainWindow):
         self.numeros = numeros
         self.mostrar_datos_tabla()
         self.actualizar_graficas()
+        self.options_group.setVisible(True)
 
     def actualizar_graficas(self):
         if not self.numeros:
@@ -153,61 +183,92 @@ class MainWindow(QMainWindow):
         self.disp_canvas.figure = disp_fig
         self.disp_canvas.draw()
 
-    def obtener_gl(self, tabla):
+    def obtener_gl(self):
         texto = self.input_gl.text().strip()
         if texto:
-            return int(texto)
-        return len(tabla) - 1
+            try:
+                valor = int(texto)
+                return valor
+            except ValueError:
+                return None
+        return None
+
+    def validar_numeros(self):
+        if not self.numeros:
+            return False, "No hay datos para evaluar."
+
+        for v in self.numeros:
+            try:
+                x = float(v)
+            except (ValueError, TypeError):
+                return False, f"Valor no numérico detectado: {v}"
+
+            if x < 0 or x > 1:
+                return False, f"Número fuera de rango [0,1]: {v}"
+
+        return True, ""
+
+    def limpiar_datos(self):
+        self.numeros = []
+        self.tab_datos.setRowCount(0)
+        self.tab_resultados.clear()
+        self.tab_tabla.clear()
+        self.tab_tabla.setRowCount(0)
+        self.tab_tabla.setColumnCount(0)
+        self.input_gl.clear()
+        self.hist_canvas.figure = g.histograma([], show=False)
+        self.hist_canvas.draw()
+        self.disp_canvas.figure = g.dispersion([], show=False)
+        self.disp_canvas.draw()
+        self.options_group.setVisible(False)
 
     def ejecutar_prueba(self):
         if not self.numeros:
+            QMessageBox.warning(self, "Validación", "Aún no hay datos cargados o generados.")
+            return
+
+        valido, mensaje = self.validar_numeros()
+        if not valido:
+            QMessageBox.warning(self, "Validación", mensaje)
             return
 
         metodo = self.combo_metodo.currentText()
         self.tab_resultados.clear()
+        self.tab_tabla.clear()
+        self.tab_tabla.setRowCount(0)
+        self.tab_tabla.setColumnCount(0)
+
+        gl = self.obtener_gl()
 
         if metodo == "Poker":
-            frec = p.contar_frecuencias(self.numeros)
-            tabla = p.generar_tabla(frec, len(self.numeros))
-
-            tabla_agrupada = p.agrupar_categorias(tabla)
-            chi = p.chi_cuadrado_agrupado(tabla_agrupada)
-
-            self.mostrar_tabla(tabla_agrupada)
-
-            gl = self.obtener_gl(tabla_agrupada)
-            chi_critico = p.obtener_chi_critico(gl)
-
-            self.tab_resultados.append(f"Chi = {chi:.4f}")
-            self.tab_resultados.append(f"GL = {gl}")
-            self.tab_resultados.append(f"Chi crítico = {chi_critico}")
-
+            resultado = p.prueba_poker(self.numeros, gl=gl)
         elif metodo == "Corridas":
-            binaria = p.generar_binaria(self.numeros)
-            corr = p.obtener_corridas(binaria)
-            FO = p.frecuencia_corridas(corr)
+            resultado = p.prueba_corridas(self.numeros, gl=gl)
+        else:
+            resultado = p.prueba_ks(self.numeros)
 
-            n = len(self.numeros)
-            max_long = max(FO.keys())
-            FE = p.frecuencia_esperada_corridas(n, max_long)
+        if not resultado:
+            self.tab_resultados.setPlainText("No se pudo ejecutar la prueba. Verifique los datos.")
+            return
 
-            tabla = p.tabla_corridas(FO, FE)
-            tabla_agrupada = p.agrupar_categorias(tabla)
+        texto = []
+        texto.append(f"Prueba: {resultado['metodo']}")
+        texto.append("------------------------------")
 
-            chi = p.chi_cuadrado_agrupado(tabla_agrupada)
+        if resultado['metodo'] in ['Poker', 'Corridas']:
+            texto.append(f"Chi = {resultado['chi']:.6f}")
+            texto.append(f"GL = {resultado['gl']}")
+            texto.append(f"Chi crítico (0.05) = {resultado['chi_critico']}")
+            texto.append(f"Decisión = {resultado['decision']}")
+            self.mostrar_tabla(resultado['tabla_agrupada'])
+        else:
+            texto.append(f"D = {resultado['D']:.6f}")
+            texto.append(f"Dp = {resultado['Dp']:.6f}")
+            texto.append(f"Dm = {resultado['Dm']:.6f}")
+            texto.append(f"D crítico (0.05) = {resultado['D_critico']:.6f}")
+            texto.append(f"Decisión = {resultado['decision']}")
 
-            self.mostrar_tabla(tabla_agrupada)
-
-            gl = self.obtener_gl(tabla_agrupada)
-            chi_critico = p.obtener_chi_critico(gl)
-
-            self.tab_resultados.append(f"Chi = {chi:.4f}")
-            self.tab_resultados.append(f"GL = {gl}")
-            self.tab_resultados.append(f"Chi crítico = {chi_critico}")
-
-        elif metodo == "Kolmogorov-Smirnov":
-            D, Dp, Dm = p.kolmogorov_smirnov(self.numeros)
-            self.tab_resultados.append(f"D = {D:.4f}")
+        self.tab_resultados.setPlainText("\n".join(texto))
 
     def mostrar_tabla(self, tabla):
         self.tab_tabla.setRowCount(len(tabla))

@@ -114,6 +114,93 @@ def generar_tabla(frecuencias, N):
     return [(cat, frecuencias.get(cat, 0), N * prob)
             for cat, prob in probabilidades.items()]
 
+# ---------- AUXILIARES DE PRUEBA ----------
+
+def obtener_chi_critico_gl(gl):
+    # Retorna chi crítico a 0.05 si existe en la tabla o aproximado (nonide)
+    return obtener_chi_critico(gl)
+
+
+def ks_critico(n, alpha=0.05):
+    if n <= 0:
+        return None
+    if alpha == 0.05:
+        return 1.36 / (n ** 0.5)
+    if alpha == 0.01:
+        return 1.63 / (n ** 0.5)
+    # valor por defecto aproximado
+    return 1.36 / (n ** 0.5)
+
+
+def prueba_poker(numeros, gl=None, alpha=0.05):
+    N = len(numeros)
+    frec = contar_frecuencias(numeros)
+    tabla = generar_tabla(frec, N)
+    tabla_agrupada = agrupar_categorias(tabla)
+    chi = chi_cuadrado_agrupado(tabla_agrupada)
+    if gl is None:
+        gl = max(len(tabla_agrupada) - 1, 1)
+    chi_critico = obtener_chi_critico_gl(gl)
+    decision = "Rechaza H0" if chi_critico is not None and chi > chi_critico else "No rechaza H0"
+
+    return {
+        "metodo": "Poker",
+        "chi": chi,
+        "gl": gl,
+        "chi_critico": chi_critico,
+        "decision": decision,
+        "tabla_agrupada": tabla_agrupada
+    }
+
+
+def prueba_corridas(numeros, gl=None, alpha=0.05):
+    N = len(numeros)
+    if N == 0:
+        return None
+
+    binaria = generar_binaria(numeros)
+    corr = obtener_corridas(binaria)
+    FO = frecuencia_corridas(corr)
+    max_long = max(FO.keys()) if FO else 0
+    FE = frecuencia_esperada_corridas(N, max_long)
+    tabla = tabla_corridas(FO, FE)
+    tabla_agrupada = agrupar_categorias(tabla)
+    chi = chi_cuadrado_agrupado(tabla_agrupada)
+    if gl is None:
+        gl = max(len(tabla_agrupada) - 1, 1)
+    chi_critico = obtener_chi_critico_gl(gl)
+    decision = "Rechaza H0" if chi_critico is not None and chi > chi_critico else "No rechaza H0"
+
+    return {
+        "metodo": "Corridas",
+        "chi": chi,
+        "gl": gl,
+        "chi_critico": chi_critico,
+        "decision": decision,
+        "tabla_agrupada": tabla_agrupada,
+        "corridas": corr,
+        "FO": FO,
+        "FE": FE
+    }
+
+
+def prueba_ks(numeros, alpha=0.05):
+    if not numeros:
+        return None
+
+    D, Dp, Dm = kolmogorov_smirnov(numeros)
+    D_critico = ks_critico(len(numeros), alpha)
+    decision = "Rechaza H0" if D > D_critico else "No rechaza H0"
+
+    return {
+        "metodo": "Kolmogorov-Smirnov",
+        "D": D,
+        "Dp": Dp,
+        "Dm": Dm,
+        "D_critico": D_critico,
+        "decision": decision
+    }
+
 # ---------- CORRIDAS ----------
 
 def generar_binaria(numeros):
