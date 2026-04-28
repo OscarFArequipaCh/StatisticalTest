@@ -1,4 +1,5 @@
 from collections import Counter
+import math
 
 probabilidades = {
     "Todos diferentes": 0.3024,
@@ -201,6 +202,99 @@ def prueba_ks(numeros, alpha=0.05):
         "decision": decision
     }
 
+
+def prueba_frecuencias(numeros, k=10, gl=None):
+    if not numeros:
+        return None
+
+    n = len(numeros)
+    for num in numeros:
+        if not (0 <= num <= 1):
+            return None
+
+    FE = n / k
+    tabla = []
+    for i in range(k):
+        inicio = i / k
+        fin = (i + 1) / k
+        etiqueta = f"[{inicio:.2f},{fin:.2f})" if i < k - 1 else f"[{inicio:.2f},{fin:.2f}]"
+        FO = sum(1 for num in numeros if inicio <= num < fin) if i < k - 1 else sum(1 for num in numeros if inicio <= num <= fin)
+        tabla.append((etiqueta, FO, FE))
+
+    tabla_agrupada = agrupar_categorias(tabla)
+    chi = chi_cuadrado_agrupado(tabla_agrupada)
+    if gl is None:
+        gl = max(len(tabla_agrupada) - 1, 1)
+    chi_critico = obtener_chi_critico_gl(gl)
+    decision = "Rechaza H0" if chi_critico is not None and chi > chi_critico else "No rechaza H0"
+
+    return {
+        "metodo": "Frecuencias",
+        "chi": chi,
+        "gl": gl,
+        "chi_critico": chi_critico,
+        "decision": decision,
+        "tabla_agrupada": tabla_agrupada
+    }
+
+
+def prueba_distancias(numeros, intervalo=(0, 0.5), gl=None):
+    if not numeros:
+        return None
+
+    a, b = intervalo
+    if not (0 <= a < b <= 1):
+        return None
+
+    for num in numeros:
+        if not (0 <= num <= 1):
+            return None
+
+    exitos = [1 if a <= num <= b else 0 for num in numeros]
+    distancias = []
+    contador = 0
+    visto_primero = False
+
+    for valor in exitos:
+        if valor == 1:
+            if visto_primero:
+                distancias.append(contador)
+            else:
+                visto_primero = True
+            contador = 0
+        elif visto_primero:
+            contador += 1
+
+    if not distancias:
+        return None
+
+    p = b - a
+    total = len(distancias)
+    FO = Counter(distancias)
+    max_dist = max(distancias)
+
+    tabla = []
+    for k in range(max_dist + 1):
+        FO_k = FO.get(k, 0)
+        FE_k = total * p * ((1 - p) ** k)
+        tabla.append((f"D={k}", FO_k, FE_k))
+
+    tabla_agrupada = agrupar_categorias(tabla)
+    chi = chi_cuadrado_agrupado(tabla_agrupada)
+    if gl is None:
+        gl = max(len(tabla_agrupada) - 1, 1)
+    chi_critico = obtener_chi_critico_gl(gl)
+    decision = "Rechaza H0" if chi_critico is not None and chi > chi_critico else "No rechaza H0"
+
+    return {
+        "metodo": "Distancias",
+        "chi": chi,
+        "gl": gl,
+        "chi_critico": chi_critico,
+        "decision": decision,
+        "tabla_agrupada": tabla_agrupada
+    }
+
 # ---------- CORRIDAS ----------
 
 def generar_binaria(numeros):
@@ -236,3 +330,105 @@ def kolmogorov_smirnov(numeros):
     Dm = max((r - (i-1)/n) for i, r in enumerate(datos, start=1))
 
     return max(Dp, Dm), Dp, Dm
+
+# ---------- PROMEDIOS ----------
+
+def prueba_promedios(numeros, alpha=0.05):
+    if not numeros:
+        return None
+
+    # Validar que los números estén en [0,1]
+    for num in numeros:
+        if not (0 <= num <= 1):
+            return None  # o podría devolver un error, pero siguiendo el patrón, None
+
+    n = len(numeros)
+    media = sum(numeros) / n
+    Z = (media - 0.5) / math.sqrt(1 / (12 * n))
+    Z_critico = 1.96  # para alpha=0.05, dos colas
+    decision = "Rechaza H0" if abs(Z) > Z_critico else "No rechaza H0"
+
+    return {
+        "metodo": "Promedios",
+        "media": media,
+        "Z": Z,
+        "Z_critico": Z_critico,
+        "decision": decision
+    }
+
+# ---------- SERIES ----------
+
+def prueba_series(numeros, k=5, gl=None, alpha=0.05):
+    """
+    Prueba de series (pares consecutivos).
+    Agrupa números en pares (r_i, r_{i+1}) y analiza su distribución
+    en una cuadrícula [0,1]x[0,1] de k x k celdas.
+    
+    Args:
+        numeros: lista de números en [0,1]
+        k: número de divisiones por lado (default 5, resultando en 25 celdas)
+        gl: grados de libertad (si None, se calcula automáticamente)
+        alpha: nivel de significancia (default 0.05)
+    
+    Returns:
+        dict con: metodo, chi, gl, chi_critico, decision, tabla_agrupada
+    """
+    if not numeros or len(numeros) < 2:
+        return None
+    
+    # Validar que los números estén en [0,1]
+    for num in numeros:
+        if not (0 <= num <= 1):
+            return None
+    
+    # Formar pares consecutivos (r_i, r_{i+1})
+    pares = [(numeros[i], numeros[i+1]) for i in range(len(numeros) - 1)]
+    n_pares = len(pares)
+    
+    # Contar frecuencias en cada celda
+    FO = {}
+    for r_i, r_i1 in pares:
+        # Determinar en qué celda cae el par
+        celda_x = int(r_i * k)
+        celda_y = int(r_i1 * k)
+        
+        # Ajustar si es exactamente 1 (está en el borde derecho/superior)
+        if celda_x == k:
+            celda_x = k - 1
+        if celda_y == k:
+            celda_y = k - 1
+        
+        celda = (celda_x, celda_y)
+        FO[celda] = FO.get(celda, 0) + 1
+    
+    # Construir tabla con todas las celdas
+    FE = n_pares / (k * k)
+    tabla = []
+    
+    for i in range(k):
+        for j in range(k):
+            celda = (i, j)
+            FO_val = FO.get(celda, 0)
+            tabla.append((f"({i},{j})", FO_val, FE))
+    
+    # Agrupar categorías si FE < 5
+    tabla_agrupada = agrupar_categorias(tabla)
+    
+    # Calcular chi-cuadrado
+    chi = chi_cuadrado_agrupado(tabla_agrupada)
+    
+    # Determinar grados de libertad
+    if gl is None:
+        gl = max(len(tabla_agrupada) - 1, 1)
+    
+    chi_critico = obtener_chi_critico_gl(gl)
+    decision = "Rechaza H0" if chi_critico is not None and chi > chi_critico else "No rechaza H0"
+    
+    return {
+        "metodo": "Series",
+        "chi": chi,
+        "gl": gl,
+        "chi_critico": chi_critico,
+        "decision": decision,
+        "tabla_agrupada": tabla_agrupada
+    }

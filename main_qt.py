@@ -3,7 +3,7 @@ from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout,
     QPushButton, QFileDialog, QTextEdit, QLabel,
     QComboBox, QTableWidget, QTableWidgetItem,
-    QHBoxLayout, QLineEdit, QMenuBar, QSizePolicy,
+    QHBoxLayout, QLineEdit, QSizePolicy,
     QGroupBox, QMessageBox
 )
 from PySide6.QtGui import QAction
@@ -43,16 +43,13 @@ class MainWindow(QMainWindow):
         opciones_layout = QVBoxLayout()
 
         self.combo_metodo = QComboBox()
-        self.combo_metodo.addItems(["Poker", "Corridas", "Kolmogorov-Smirnov"])
+        self.combo_metodo.addItems(["Poker", "Corridas", "Kolmogorov-Smirnov", "Frecuencias", "Distancias", "Promedios", "Series"])
 
         self.input_gl = QLineEdit()
         self.input_gl.setPlaceholderText("GL (opcional)")
 
         self.btn_ejecutar = QPushButton("Ejecutar prueba")
         self.btn_ejecutar.clicked.connect(self.ejecutar_prueba)
-
-        self.btn_graficar = QPushButton("Mostrar gráficas")
-        self.btn_graficar.clicked.connect(self.mostrar_graficas)
 
         self.btn_limpiar = QPushButton("Limpiar")
         self.btn_limpiar.setStyleSheet("background-color: #ff6b6b; color: white;")
@@ -61,7 +58,6 @@ class MainWindow(QMainWindow):
         opciones_layout.addWidget(self.combo_metodo)
         opciones_layout.addWidget(self.input_gl)
         opciones_layout.addWidget(self.btn_ejecutar)
-        opciones_layout.addWidget(self.btn_graficar)
         opciones_layout.addWidget(self.btn_limpiar)
 
         self.options_group = QGroupBox("Opciones de prueba")
@@ -244,8 +240,16 @@ class MainWindow(QMainWindow):
             resultado = p.prueba_poker(self.numeros, gl=gl)
         elif metodo == "Corridas":
             resultado = p.prueba_corridas(self.numeros, gl=gl)
-        else:
+        elif metodo == "Kolmogorov-Smirnov":
             resultado = p.prueba_ks(self.numeros)
+        elif metodo == "Frecuencias":
+            resultado = p.prueba_frecuencias(self.numeros, gl=gl)
+        elif metodo == "Distancias":
+            resultado = p.prueba_distancias(self.numeros)
+        elif metodo == "Promedios":
+            resultado = p.prueba_promedios(self.numeros)
+        elif metodo == "Series":
+            resultado = p.prueba_series(self.numeros, gl=gl)
 
         if not resultado:
             self.tab_resultados.setPlainText("No se pudo ejecutar la prueba. Verifique los datos.")
@@ -255,12 +259,17 @@ class MainWindow(QMainWindow):
         texto.append(f"Prueba: {resultado['metodo']}")
         texto.append("------------------------------")
 
-        if resultado['metodo'] in ['Poker', 'Corridas']:
+        if resultado['metodo'] in ['Poker', 'Corridas', 'Frecuencias', 'Distancias', 'Series']:
             texto.append(f"Chi = {resultado['chi']:.6f}")
             texto.append(f"GL = {resultado['gl']}")
             texto.append(f"Chi crítico (0.05) = {resultado['chi_critico']}")
             texto.append(f"Decisión = {resultado['decision']}")
             self.mostrar_tabla(resultado['tabla_agrupada'])
+        elif resultado['metodo'] == 'Promedios':
+            texto.append(f"Media = {resultado['media']:.6f}")
+            texto.append(f"Z = {resultado['Z']:.6f}")
+            texto.append(f"Z crítico (0.05) = ±{resultado['Z_critico']:.2f}")
+            texto.append(f"Decisión = {resultado['decision']}")
         else:
             texto.append(f"D = {resultado['D']:.6f}")
             texto.append(f"Dp = {resultado['Dp']:.6f}")
@@ -279,29 +288,6 @@ class MainWindow(QMainWindow):
             self.tab_tabla.setItem(i, 0, QTableWidgetItem(cat))
             self.tab_tabla.setItem(i, 1, QTableWidgetItem(str(fo)))
             self.tab_tabla.setItem(i, 2, QTableWidgetItem(f"{fe:.4f}"))
-
-    def mostrar_graficas(self):
-        import graficas as g
-
-        if not self.numeros:
-            return
-
-        metodo = self.combo_metodo.currentText()
-
-        if metodo == "Poker":
-            frec = p.contar_frecuencias(self.numeros)
-            g.graficar_poker(p.generar_tabla(frec, len(self.numeros)))
-
-        elif metodo == "Corridas":
-            corr = p.obtener_corridas(p.generar_binaria(self.numeros))
-            g.graficar_corridas(p.frecuencia_corridas(corr))
-
-        elif metodo == "Kolmogorov-Smirnov":
-            g.graficar_ks(self.numeros)
-
-        g.histograma(self.numeros)
-        g.dispersion(self.numeros)
-
 
 # ---------------- EJECUCIÓN ----------------
 
