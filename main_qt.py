@@ -161,10 +161,17 @@ class MainWindow(QMainWindow):
         abrir_generador(self.set_numeros)
 
     def set_numeros(self, numeros):
-        self.numeros = numeros
+        try:
+            self.numeros = [float(x) for x in numeros]
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"No se pudieron cargar los números: {e}")
+            return False
+
         self.mostrar_datos_tabla()
         self.actualizar_graficas()
         self.options_group.setVisible(True)
+        return True
+
 
     def actualizar_graficas(self):
         if not self.numeros:
@@ -195,12 +202,9 @@ class MainWindow(QMainWindow):
 
         for v in self.numeros:
             try:
-                x = float(v)
+                float(v)
             except (ValueError, TypeError):
                 return False, f"Valor no numérico detectado: {v}"
-
-            if x < 0 or x > 1:
-                return False, f"Número fuera de rango [0,1]: {v}"
 
         return True, ""
 
