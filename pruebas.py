@@ -1,28 +1,16 @@
 from collections import Counter
 import math
+from config import PROBABILIDADES_POKER, CHI_CRITICO_005, KS_CRITICO_005, Z_CRITICO_PROMEDIOS
 
-probabilidades = {
-    "Todos diferentes": 0.3024,
-    "Un par": 0.5040,
-    "Dos pares": 0.1080,
-    "Trica": 0.0720,
-    "Full": 0.0090,
-    "Poker": 0.0045,
-    "Quintilla": 0.0001
-}
+probabilidades = PROBABILIDADES_POKER
 
-CHI_CRITICO_005 = {
-    1: 3.84, 2: 5.99, 3: 7.81, 4: 9.49, 5: 11.07,
-    6: 12.59, 7: 14.07, 8: 15.51, 9: 16.92, 10: 18.31,
-    11: 19.68, 12: 21.03, 13: 22.36, 14: 23.68, 15: 25.00,
-    16: 26.30, 17: 27.59, 18: 28.87, 19: 30.14, 20: 31.41
-}
+CHI_CRITICO_005 = CHI_CRITICO_005
 
-def obtener_chi_critico(gl):
-    if gl in CHI_CRITICO_005:
-        return CHI_CRITICO_005[gl]
-    else:
-        return None  # fuera de tabla
+def validar_numeros_uniformes(numeros):
+    """Valida que todos los números estén en [0, 1]."""
+    if not numeros:
+        return False
+    return all(0 <= num <= 1 for num in numeros)
 
 def agrupar_categorias(tabla):
     """
@@ -118,22 +106,25 @@ def generar_tabla(frecuencias, N):
 # ---------- AUXILIARES DE PRUEBA ----------
 
 def obtener_chi_critico_gl(gl):
-    # Retorna chi crítico a 0.05 si existe en la tabla o aproximado (nonide)
-    return obtener_chi_critico(gl)
+    # Retorna chi crítico a 0.05 si existe en la tabla o None si no
+    return CHI_CRITICO_005.get(gl, None)
 
 
 def ks_critico(n, alpha=0.05):
     if n <= 0:
         return None
     if alpha == 0.05:
-        return 1.36 / (n ** 0.5)
+        return KS_CRITICO_005 / (n ** 0.5)
     if alpha == 0.01:
         return 1.63 / (n ** 0.5)
     # valor por defecto aproximado
-    return 1.36 / (n ** 0.5)
+    return KS_CRITICO_005 / (n ** 0.5)
 
 
 def prueba_poker(numeros, gl=None, alpha=0.05):
+    if not validar_numeros_uniformes(numeros):
+        return None
+
     N = len(numeros)
     frec = contar_frecuencias(numeros)
     tabla = generar_tabla(frec, N)
@@ -155,6 +146,9 @@ def prueba_poker(numeros, gl=None, alpha=0.05):
 
 
 def prueba_corridas(numeros, gl=None, alpha=0.05):
+    if not validar_numeros_uniformes(numeros):
+        return None
+
     N = len(numeros)
     if N == 0:
         return None
@@ -186,7 +180,7 @@ def prueba_corridas(numeros, gl=None, alpha=0.05):
 
 
 def prueba_ks(numeros, alpha=0.05):
-    if not numeros:
+    if not validar_numeros_uniformes(numeros):
         return None
 
     D, Dp, Dm = kolmogorov_smirnov(numeros)
@@ -204,14 +198,10 @@ def prueba_ks(numeros, alpha=0.05):
 
 
 def prueba_frecuencias(numeros, k=10, gl=None):
-    if not numeros:
+    if not validar_numeros_uniformes(numeros):
         return None
 
     n = len(numeros)
-    for num in numeros:
-        if not (0 <= num <= 1):
-            return None
-
     FE = n / k
     tabla = []
     for i in range(k):
@@ -239,16 +229,12 @@ def prueba_frecuencias(numeros, k=10, gl=None):
 
 
 def prueba_distancias(numeros, intervalo=(0, 0.5), gl=None):
-    if not numeros:
+    if not validar_numeros_uniformes(numeros):
         return None
 
     a, b = intervalo
     if not (0 <= a < b <= 1):
         return None
-
-    for num in numeros:
-        if not (0 <= num <= 1):
-            return None
 
     exitos = [1 if a <= num <= b else 0 for num in numeros]
     distancias = []
@@ -334,18 +320,13 @@ def kolmogorov_smirnov(numeros):
 # ---------- PROMEDIOS ----------
 
 def prueba_promedios(numeros, alpha=0.05):
-    if not numeros:
+    if not validar_numeros_uniformes(numeros):
         return None
-
-    # Validar que los números estén en [0,1]
-    for num in numeros:
-        if not (0 <= num <= 1):
-            return None  # o podría devolver un error, pero siguiendo el patrón, None
 
     n = len(numeros)
     media = sum(numeros) / n
     Z = (media - 0.5) / math.sqrt(1 / (12 * n))
-    Z_critico = 1.96  # para alpha=0.05, dos colas
+    Z_critico = Z_CRITICO_PROMEDIOS  # para alpha=0.05, dos colas
     decision = "Rechaza H0" if abs(Z) > Z_critico else "No rechaza H0"
 
     return {
@@ -373,13 +354,8 @@ def prueba_series(numeros, k=5, gl=None, alpha=0.05):
     Returns:
         dict con: metodo, chi, gl, chi_critico, decision, tabla_agrupada
     """
-    if not numeros or len(numeros) < 2:
+    if not validar_numeros_uniformes(numeros) or len(numeros) < 2:
         return None
-    
-    # Validar que los números estén en [0,1]
-    for num in numeros:
-        if not (0 <= num <= 1):
-            return None
     
     # Formar pares consecutivos (r_i, r_{i+1})
     pares = [(numeros[i], numeros[i+1]) for i in range(len(numeros) - 1)]
